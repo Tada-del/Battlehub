@@ -170,7 +170,14 @@ const state = {
   red:  { gold: 200, castleHP: 1000, castleMaxHP: 1000, incomeBoost: 1 },
   blue: { gold: 200, castleHP: 1000, castleMaxHP: 1000, incomeBoost: 1 },
   goldRate: 28,          // gold per second baseline per side
+  difficulty: 'normal',
   ai: { nextDecision: 1.5 },
+};
+
+const DIFFICULTY = {
+  easy:   { incomeMult: 0.85, decisionMin: 1.6, decisionMax: 2.6, smartChance: 0.25 },
+  normal: { incomeMult: 1.00, decisionMin: 0.8, decisionMax: 1.6, smartChance: 0.55 },
+  hard:   { incomeMult: 1.20, decisionMin: 0.5, decisionMax: 1.0, smartChance: 0.85 },
 };
 
 // ---------- Canvas setup ----------
@@ -491,9 +498,10 @@ function spawnPuff(x, y, side){
 // ---------- AI ----------
 function aiTick(dt){
   if (state.mode !== 'vsAI' || state.over) return;
+  const D = DIFFICULTY[state.difficulty] || DIFFICULTY.normal;
   state.ai.nextDecision -= dt;
   if (state.ai.nextDecision > 0) return;
-  state.ai.nextDecision = rand(0.8, 1.6);
+  state.ai.nextDecision = rand(D.decisionMin, D.decisionMax);
 
   const side = state.playerSide === 'red' ? 'blue' : 'red';
   const me = state[side];
@@ -519,15 +527,16 @@ function aiTick(dt){
 
   // Choose what to spawn based on simple heuristics + budget
   const choices = [];
+  const smart = Math.random() < D.smartChance;
   const wantTank = melee < 3;
-  if (wantTank) choices.push(['sword', 4]);
-  if (enemyMelee >= 3) choices.push(['archer', 3], ['mage', 2]);
-  if (enemyRanged >= 2) choices.push(['knight', 3], ['sword', 2]);
-  if (melee >= 3 && support === 0) choices.push(['healer', 2]);
-  if (me.gold >= 300 && Math.random() < 0.4) choices.push(['giant', 2]);
-  if (me.gold >= 260 && Math.random() < 0.5) choices.push(['catapult', 2]);
-  if (enemyRanged >= 2 && Math.random() < 0.6) choices.push(['assassin', 3]);
-  choices.push(['pike', 2], ['archer', 2], ['knight', 1], ['assassin', 1], ['catapult', 1]);
+  if (wantTank) choices.push(['sword', smart ? 5 : 3]);
+  if (enemyMelee >= 3) choices.push(['archer', smart ? 4 : 2], ['mage', smart ? 3 : 1]);
+  if (enemyRanged >= 2) choices.push(['knight', smart ? 4 : 2], ['sword', 2], ['assassin', smart ? 4 : 2]);
+  if (melee >= 3 && support === 0) choices.push(['healer', smart ? 3 : 2]);
+  if (me.gold >= 300 && Math.random() < (smart ? 0.5 : 0.3)) choices.push(['giant', 2]);
+  if (me.gold >= 260 && Math.random() < (smart ? 0.6 : 0.3)) choices.push(['catapult', 2]);
+  // Always-on small weights so spawns happen even early
+  choices.push(['pike', 2], ['archer', 2], ['knight', 1], ['assassin', 1], ['catapult', 1], ['sword', 2]);
 
   // Weighted random
   let total = 0;
@@ -549,9 +558,13 @@ function aiTick(dt){
 
 // ---------- Combat / movement ----------
 function update(dt){
-  // Income
-  state.red.gold  += state.goldRate * dt * state.red.incomeBoost;
-  state.blue.gold += state.goldRate * dt * state.blue.incomeBoost;
+  // Income (AI side gets a difficulty multiplier in vsAI mode)
+  const D = DIFFICULTY[state.difficulty] || DIFFICULTY.normal;
+  const aiSide = state.mode === 'vsAI' ? (state.playerSide === 'red' ? 'blue' : 'red') : null;
+  const redMult  = (aiSide === 'red')  ? D.incomeMult : 1;
+  const blueMult = (aiSide === 'blue') ? D.incomeMult : 1;
+  state.red.gold  += state.goldRate * dt * state.red.incomeBoost  * redMult;
+  state.blue.gold += state.goldRate * dt * state.blue.incomeBoost * blueMult;
   state.red.gold  = Math.min(state.red.gold,  600);
   state.blue.gold = Math.min(state.blue.gold, 600);
 
@@ -1463,6 +1476,9 @@ document.getElementById('modeSelect').addEventListener('change', (e) => {
 document.getElementById('sideSelect').addEventListener('change', (e) => {
   state.playerSide = e.target.value;
   updateSelectedHighlight();
+});
+document.getElementById('diffSelect').addEventListener('change', (e) => {
+  state.difficulty = e.target.value;
 });
 
 window.addEventListener('keydown', e => {
