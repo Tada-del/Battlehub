@@ -1441,25 +1441,34 @@ function drawParticle(p){
   ctx.globalAlpha = 1;
 }
 
-// ---------- Mouse / deploy ----------
+// ---------- Pointer / deploy ----------
 const mouse = { x: 0, y: 0, inside: false };
-canvas.addEventListener('mousemove', e => {
+function pointerToGame(e){
   const r = canvas.getBoundingClientRect();
-  mouse.x = (e.clientX - r.left) * (W / r.width);
-  mouse.y = (e.clientY - r.top)  * (H / r.height);
-  mouse.inside = true;
+  return {
+    x: (e.clientX - r.left) * (W / r.width),
+    y: (e.clientY - r.top)  * (H / r.height),
+  };
+}
+canvas.addEventListener('pointermove', e => {
+  const p = pointerToGame(e);
+  mouse.x = p.x; mouse.y = p.y; mouse.inside = true;
 });
-canvas.addEventListener('mouseleave', () => mouse.inside = false);
-canvas.addEventListener('click', e => {
+canvas.addEventListener('pointerleave', () => mouse.inside = false);
+canvas.addEventListener('pointerdown', e => {
   if (state.over) return;
-  const r = canvas.getBoundingClientRect();
-  const x = (e.clientX - r.left) * (W / r.width);
-  const y = (e.clientY - r.top)  * (H / r.height);
-  const side = decideSide(x);
+  // For touch the move event may not fire — set position immediately
+  const p = pointerToGame(e);
+  mouse.x = p.x; mouse.y = p.y; mouse.inside = true;
+  const side = decideSide(p.x);
   if (!side) return;
-  if (!isPlayerSide(side)) return;
-  tryDeploy(side, state.selected, x, y);
-});
+  if (!isPlayerSide(side)){ Audio.deny(); return; }
+  if (!tryDeploy(side, state.selected, p.x, p.y)) Audio.deny();
+  // Prevent double-fire / scroll-jank on touch
+  e.preventDefault();
+}, { passive: false });
+// Block context menu on long-press / right-click on the board
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 function decideSide(x){
   if (state.mode === 'sandbox') return x < W/2 ? 'red' : 'blue';
   return state.playerSide;
