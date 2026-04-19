@@ -4,9 +4,11 @@ A real-time troop battle game built with vanilla HTML5 Canvas — no frameworks,
 
 Deploy Swordsmen, Archers, Knights, Pikemen, Mages, Healers, and Giants on the battlefield and crush the enemy castle.
 
-## Play
+## Play online
 
-Just open `index.html` in any modern browser, or use the public link added to the PR description.
+🎮 **Live game:** https://clash-of-banners-91742.surge.sh
+
+Or open `index.html` in any modern browser locally.
 
 ### Controls
 
