@@ -153,6 +153,10 @@ const TROOPS = {
 const TROOP_ORDER = ['sword','archer','knight','pike','mage','healer','giant','assassin','catapult'];
 const HOTKEYS = {1:'sword',2:'archer',3:'knight',4:'pike',5:'mage',6:'healer',7:'giant',8:'assassin',9:'catapult'};
 
+function makeStats(){
+  return { deployed: 0, kills: 0, goldSpent: 0, dmgDealt: 0, dmgTaken: 0, castleDmg: 0 };
+}
+
 // ---------- Game state ----------
 const state = {
   mode: 'vsAI',          // 'vsAI' | 'sandbox'
@@ -167,8 +171,8 @@ const state = {
   projectiles: [],
   particles: [],
   damageText: [],
-  red:  { gold: 200, castleHP: 1000, castleMaxHP: 1000, incomeBoost: 1 },
-  blue: { gold: 200, castleHP: 1000, castleMaxHP: 1000, incomeBoost: 1 },
+  red:  { gold: 200, castleHP: 1000, castleMaxHP: 1000, incomeBoost: 1, stats: makeStats() },
+  blue: { gold: 200, castleHP: 1000, castleMaxHP: 1000, incomeBoost: 1, stats: makeStats() },
   goldRate: 28,          // gold per second baseline per side
   difficulty: 'normal',
   ai: { nextDecision: 1.5 },
@@ -478,6 +482,8 @@ function tryDeploy(side, key, x, y){
   if (state.units.length >= MAX_UNITS) return false;
 
   sideState.gold -= T.cost;
+  sideState.stats.deployed++;
+  sideState.stats.goldSpent += T.cost;
   state.units.push(makeUnit(key, side, x, y));
   spawnPuff(x, y, side);
   Audio.coin();
@@ -954,6 +960,16 @@ function applyDamage(attacker, target, dmg, p){
   if (!target.alive) return;
   target.hp -= dmg;
   target.hitFlash = 1;
+  // Stats: attribute damage by attacker's side (attacker may be a unit or castle owner)
+  const aSide = attacker && attacker.side ? attacker.side : null;
+  const tSide = target.side;
+  if (aSide && state[aSide] && state[aSide].stats){
+    const credited = Math.min(dmg, Math.max(0, target.hp + dmg));
+    state[aSide].stats.dmgDealt += credited;
+  }
+  if (tSide && state[tSide] && state[tSide].stats){
+    state[tSide].stats.dmgTaken += dmg;
+  }
   // small knockback
   const T = TROOPS[target.key];
   const dx = target.x - (p ? p.x : attacker.x);
@@ -965,6 +981,7 @@ function applyDamage(attacker, target, dmg, p){
   state.damageText.push({ x: target.x, y: target.y - 12, text: Math.round(dmg)+'', color:'#fff', life:0.55 });
   if (target.hp <= 0){
     target.alive = false;
+    if (aSide && state[aSide] && state[aSide].stats) state[aSide].stats.kills++;
   }
 }
 
@@ -1006,7 +1023,14 @@ function spawnDeath(u){
 
 function damageCastle(attacker, side, dmg){
   const cs = state[side];
+  const before = cs.castleHP;
   cs.castleHP = Math.max(0, cs.castleHP - dmg);
+  const dealt = before - cs.castleHP;
+  const aSide = attacker && attacker.side;
+  if (aSide && state[aSide] && state[aSide].stats){
+    state[aSide].stats.castleDmg += dealt;
+    state[aSide].stats.dmgDealt  += dealt;
+  }
   // shake + dust at door
   const cx = side === 'red' ? RED_CASTLE_X + CASTLE_W : BLUE_CASTLE_X;
   for (let i = 0; i < 4; i++){
@@ -1022,6 +1046,27 @@ function damageCastle(attacker, side, dmg){
 
 let shakeAmount = 0;
 
+function showScoreboard(winner){
+  const r = state.red.stats, b = state.blue.stats;
+  const t = Math.floor(state.time);
+  const mm = String(Math.floor(t/60)).padStart(2,'0');
+  const ss = String(t%60).padStart(2,'0');
+  document.getElementById('sbTitle').textContent = (winner === 'red' ? 'Red' : 'Blue') + ' wins!';
+  document.getElementById('sbDepRed').textContent = r.deployed;
+  document.getElementById('sbDepBlue').textContent = b.deployed;
+  document.getElementById('sbKillRed').textContent = r.kills;
+  document.getElementById('sbKillBlue').textContent = b.kills;
+  document.getElementById('sbDmgRed').textContent = Math.round(r.dmgDealt);
+  document.getElementById('sbDmgBlue').textContent = Math.round(b.dmgDealt);
+  document.getElementById('sbCastleRed').textContent = Math.round(r.castleDmg);
+  document.getElementById('sbCastleBlue').textContent = Math.round(b.castleDmg);
+  document.getElementById('sbGoldRed').textContent = r.goldSpent;
+  document.getElementById('sbGoldBlue').textContent = b.goldSpent;
+  document.getElementById('sbTimeRed').textContent = `${mm}:${ss}`;
+  document.getElementById('sbTimeBlue').textContent = `${mm}:${ss}`;
+  setTimeout(() => document.getElementById('scoreboard').classList.add('show'), 600);
+}
+
 function endGame(winner){
   state.over = true;
   state.winner = winner;
@@ -1030,6 +1075,7 @@ function endGame(winner){
   banner.textContent = (winner === 'red' ? 'Red' : 'Blue') + ' wins!';
   banner.classList.remove('red','blue');
   banner.classList.add('show', winner);
+  showScoreboard(winner);
   // Confetti / fireworks
   for (let i = 0; i < 80; i++){
     state.particles.push({
@@ -1452,6 +1498,7 @@ function drawDeployPreview(){
 
 // ---------- Controls (UI) ----------
 document.getElementById('restartBtn').addEventListener('click', restart);
+document.getElementById('sbRestart').addEventListener('click', restart);
 document.getElementById('muteBtn').addEventListener('click', () => {
   Audio.init(); Audio.resume();
   const m = !Audio.isMuted();
@@ -1499,11 +1546,15 @@ function restart(){
   state.red.gold = 200; state.blue.gold = 200;
   state.red.castleHP = state.red.castleMaxHP;
   state.blue.castleHP = state.blue.castleMaxHP;
+  state.red.stats = makeStats();
+  state.blue.stats = makeStats();
   state.over = false; state.winner = null;
   state.time = 0; state.ai.nextDecision = 1.5;
   shakeAmount = 0;
   const banner = document.getElementById('banner');
   banner.classList.remove('show','red','blue');
+  const sb = document.getElementById('scoreboard');
+  if (sb) sb.classList.remove('show');
 }
 
 // ---------- Main loop ----------

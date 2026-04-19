@@ -55,6 +55,31 @@
     <div class="canvas-wrap">
       <canvas id="game" width="1280" height="720" aria-label="Battlefield"></canvas>
       <div class="banner" id="banner"></div>
+      <div class="scoreboard" id="scoreboard" role="dialog" aria-label="Battle results">
+        <div class="sb-card">
+          <div class="sb-title" id="sbTitle">Victory</div>
+          <div class="sb-grid">
+            <div></div>
+            <div class="sb-col red">RED</div>
+            <div class="sb-col blue">BLUE</div>
+            <div class="sb-row">Units deployed</div>
+            <div id="sbDepRed">0</div><div id="sbDepBlue">0</div>
+            <div class="sb-row">Kills</div>
+            <div id="sbKillRed">0</div><div id="sbKillBlue">0</div>
+            <div class="sb-row">Damage dealt</div>
+            <div id="sbDmgRed">0</div><div id="sbDmgBlue">0</div>
+            <div class="sb-row">Castle damage</div>
+            <div id="sbCastleRed">0</div><div id="sbCastleBlue">0</div>
+            <div class="sb-row">Gold spent</div>
+            <div id="sbGoldRed">0</div><div id="sbGoldBlue">0</div>
+            <div class="sb-row">Battle time</div>
+            <div id="sbTimeRed">—</div><div id="sbTimeBlue">—</div>
+          </div>
+          <div class="sb-actions">
+            <button class="btn" id="sbRestart">↻ Play again</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <aside class="panel right" aria-label="Blue army">
