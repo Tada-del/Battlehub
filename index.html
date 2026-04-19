@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Clash of Banners — Troop Battle Arena</title>
+<meta name="description" content="A real-time troop battle game. Deploy Swordsmen, Archers, Knights, Pikemen, Mages, Healers and Giants on a beautiful battlefield." />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b1020'/%3E%3Cpath d='M14 18 L32 50 L50 18 Z' fill='%23ffd166'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <span class="crest red"></span>
+      <h1>Clash of Banners</h1>
+      <span class="crest blue"></span>
+    </div>
+    <div class="controls">
+      <label class="seg">
+        <span>Mode</span>
+        <select id="modeSelect" aria-label="Game mode">
+          <option value="vsAI">Play vs AI</option>
+          <option value="sandbox">Sandbox (control both)</option>
+        </select>
+      </label>
+      <label class="seg">
+        <span>Side</span>
+        <select id="sideSelect" aria-label="Your side">
+          <option value="red">Red (left)</option>
+          <option value="blue">Blue (right)</option>
+        </select>
+      </label>
+      <label class="seg">
+        <span>AI</span>
+        <select id="diffSelect" aria-label="AI difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+      <button id="restartBtn" class="btn ghost" title="Restart battle">↻ Restart</button>
+      <button id="pauseBtn" class="btn ghost" title="Pause / Resume">❚❚ Pause</button>
+      <button id="muteBtn" class="btn ghost" title="Mute / Unmute" aria-pressed="false">🔊 Sound</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <aside class="panel left" aria-label="Red army">
+      <div class="hpbar"><div class="fill red" id="redHP"></div><span class="label">RED CASTLE</span></div>
+      <div class="gold"><span class="coin">●</span><span id="redGold">0</span></div>
+      <div class="roster" id="redRoster"></div>
+      <div class="hint">Click on your half to deploy.</div>
+    </aside>
+
+    <div class="canvas-wrap">
+      <canvas id="game" width="1280" height="720" aria-label="Battlefield"></canvas>
+      <div class="banner" id="banner"></div>
+      <div class="scoreboard" id="scoreboard" role="dialog" aria-label="Battle results">
+        <div class="sb-card">
+          <div class="sb-title" id="sbTitle">Victory</div>
+          <div class="sb-grid">
+            <div></div>
+            <div class="sb-col red">RED</div>
+            <div class="sb-col blue">BLUE</div>
+            <div class="sb-row">Units deployed</div>
+            <div id="sbDepRed">0</div><div id="sbDepBlue">0</div>
+            <div class="sb-row">Kills</div>
+            <div id="sbKillRed">0</div><div id="sbKillBlue">0</div>
+            <div class="sb-row">Damage dealt</div>
+            <div id="sbDmgRed">0</div><div id="sbDmgBlue">0</div>
+            <div class="sb-row">Castle damage</div>
+            <div id="sbCastleRed">0</div><div id="sbCastleBlue">0</div>
+            <div class="sb-row">Gold spent</div>
+            <div id="sbGoldRed">0</div><div id="sbGoldBlue">0</div>
+            <div class="sb-row">Battle time</div>
+            <div id="sbTimeRed">—</div><div id="sbTimeBlue">—</div>
+          </div>
+          <div class="sb-actions">
+            <button class="btn" id="sbRestart">↻ Play again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel right" aria-label="Blue army">
+      <div class="hpbar"><div class="fill blue" id="blueHP"></div><span class="label">BLUE CASTLE</span></div>
+      <div class="gold"><span class="coin">●</span><span id="blueGold">0</span></div>
+      <div class="roster" id="blueRoster"></div>
+      <div class="hint">Destroy the enemy castle to win.</div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>Tip: <b>Swords</b> beat <b>Archers</b>, <b>Pikes</b> beat <b>Knights</b>, <b>Knights</b> beat <b>Swords</b>, <b>Mages</b> shred groups, <b>Healers</b> keep your line alive.</span>
+  </footer>
+
+  <script src="game.js"></script>
+</body>
+</html>
