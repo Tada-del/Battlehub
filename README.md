@@ -33,6 +33,8 @@ Or open `index.html` in any modern browser locally.
 | Mage | 180 | AoE vs swarms | Archers |
 | Healer | 120 | Sustain behind line | Anything if exposed |
 | Giant | 300 | Massive HP soak | Pikemen + Archer combo |
+| Assassin | 140 | Fast striker, 1.5× vs ranged | Pikemen, Knights |
+| Catapult | 260 | Long-range siege, 2.5× vs castles | Assassins, fast melee |
 
 ## Tech notes
 

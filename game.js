@@ -138,9 +138,20 @@ const TROOPS = {
     atkSpeed:0.8, r:18, role:'melee', kbResist:0.95, splash:30,
     desc:'Massive HP. Slow stomper.',
   },
+  assassin: {
+    key:'assassin', name:'Assassin', cost:140, hp:60, dmg:55, range:22, speed:120,
+    atkSpeed:1.6, r:9, role:'melee', kbResist:0.3, antiRanged:1.5,
+    desc:'Fast striker. Bonus vs ranged.',
+  },
+  catapult: {
+    key:'catapult', name:'Catapult', cost:260, hp:140, dmg:34, range:340, speed:24,
+    atkSpeed:0.35, r:16, role:'ranged', projectile:'rock', splash:46, kbResist:0.9,
+    siegeBonus:2.5,
+    desc:'Long-range siege. 2.5× vs castles.',
+  },
 };
-const TROOP_ORDER = ['sword','archer','knight','pike','mage','healer','giant'];
-const HOTKEYS = {1:'sword',2:'archer',3:'knight',4:'pike',5:'mage',6:'healer',7:'giant'};
+const TROOP_ORDER = ['sword','archer','knight','pike','mage','healer','giant','assassin','catapult'];
+const HOTKEYS = {1:'sword',2:'archer',3:'knight',4:'pike',5:'mage',6:'healer',7:'giant',8:'assassin',9:'catapult'};
 
 // ---------- Game state ----------
 const state = {
@@ -391,6 +402,36 @@ function drawTroopIcon(c, key, side){
       c.fillStyle = '#f5d0a9'; c.beginPath(); c.arc(19, 9, 6, 0, TAU); c.fill();
       c.strokeStyle = '#cbd5e1'; c.lineWidth = 3;
       c.beginPath(); c.moveTo(7, 22); c.lineTo(31, 22); c.stroke(); break;
+    case 'assassin':
+      // dark hood
+      c.fillStyle = '#111827';
+      c.beginPath(); c.arc(19, 11, 6, Math.PI, TAU); c.fill();
+      c.fillStyle = '#1f2937';
+      c.beginPath(); c.moveTo(13, 12); c.lineTo(25, 12); c.lineTo(23, 18); c.lineTo(15, 18); c.closePath(); c.fill();
+      // dual daggers
+      c.strokeStyle = '#e2e8f0'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(11, 18); c.lineTo(8, 26); c.stroke();
+      c.beginPath(); c.moveTo(27, 18); c.lineTo(30, 26); c.stroke(); break;
+    case 'catapult':
+      c.clearRect(0,0,38,38);
+      c.fillStyle = 'rgba(0,0,0,.35)';
+      c.beginPath(); c.ellipse(19, 33, 14, 3, 0, 0, TAU); c.fill();
+      // wheels
+      c.fillStyle = '#3a2a1a';
+      c.beginPath(); c.arc(11, 28, 4, 0, TAU); c.fill();
+      c.beginPath(); c.arc(27, 28, 4, 0, TAU); c.fill();
+      // chassis
+      c.fillStyle = '#7a5a2a';
+      c.fillRect(8, 22, 22, 5);
+      // arm
+      c.strokeStyle = '#a78140'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(11, 24); c.lineTo(28, 10); c.stroke();
+      // payload
+      c.fillStyle = '#94a3b8';
+      c.beginPath(); c.arc(28, 10, 3.5, 0, TAU); c.fill();
+      // banner color
+      c.fillStyle = body;
+      c.fillRect(18, 18, 3, 5); break;
   }
 }
 
@@ -484,7 +525,9 @@ function aiTick(dt){
   if (enemyRanged >= 2) choices.push(['knight', 3], ['sword', 2]);
   if (melee >= 3 && support === 0) choices.push(['healer', 2]);
   if (me.gold >= 300 && Math.random() < 0.4) choices.push(['giant', 2]);
-  choices.push(['pike', 2], ['archer', 2], ['knight', 1]);
+  if (me.gold >= 260 && Math.random() < 0.5) choices.push(['catapult', 2]);
+  if (enemyRanged >= 2 && Math.random() < 0.6) choices.push(['assassin', 3]);
+  choices.push(['pike', 2], ['archer', 2], ['knight', 1], ['assassin', 1], ['catapult', 1]);
 
   // Weighted random
   let total = 0;
@@ -570,6 +613,15 @@ function update(dt){
         if (!o.alive || o.side === u.side) continue;
         const d2 = dist2(u.x, u.y, o.x, o.y);
         if (d2 < targetD2){ targetD2 = d2; target = o; }
+      }
+      // Siege units: prefer castle when in range
+      if (u.key === 'catapult'){
+        const enemySide = u.side === 'red' ? 'blue' : 'red';
+        const cx = enemySide === 'red' ? RED_CASTLE_X + CASTLE_W/2 : BLUE_CASTLE_X + CASTLE_W/2;
+        if (Math.abs(u.x - cx) < T.range){
+          target = { x: cx, y: H/2, isUnit: false, isCastle: true, side: enemySide };
+          targetCastle = true;
+        }
       }
     }
     // If no enemy near & not support, march toward enemy castle
@@ -680,6 +732,14 @@ function update(dt){
     if (p.kind === 'arrow'){
       // gravity arc just for visual
       p.vy += 80 * dt;
+    } else if (p.kind === 'rock'){
+      p.vy += 240 * dt;
+      if (Math.random() < 0.3){
+        state.particles.push({
+          x: p.x, y: p.y, vx: rand(-10,10), vy: rand(-10,10),
+          life: 0.4, max:0.4, color: '#9ca3af', size: 1.6, gravity: 0,
+        });
+      }
     } else if (p.kind === 'fireball'){
       // small wobble
       p.spin = (p.spin || 0) + dt * 12;
@@ -708,7 +768,7 @@ function update(dt){
         const side = p.targetCastleSide;
         const cx = side === 'red' ? RED_CASTLE_X : BLUE_CASTLE_X;
         if (p.x >= cx && p.x <= cx + CASTLE_W && p.y >= H/2 - CASTLE_H/2 && p.y <= H/2 + CASTLE_H/2){
-          damageCastle(p.owner, side, p.dmg);
+          damageCastle(p.owner, side, p.dmg * (p.siegeBonus || 1));
           hit = true;
         }
       }
@@ -782,7 +842,9 @@ function attack(attacker, target){
   } else {
     // Melee: instant hit, slight knockback animation
     let dmg = T.dmg;
-    if (T.antiCav && TROOPS[target.key].charge) dmg *= T.antiCav;
+    const Tt = TROOPS[target.key];
+    if (T.antiCav && Tt && Tt.charge) dmg *= T.antiCav;
+    if (T.antiRanged && Tt && Tt.role === 'ranged') dmg *= T.antiRanged;
     if (T.charge && attacker.chargeBoost > 0){
       dmg *= 1 + attacker.chargeBoost;
       attacker.chargeBoost = 0;
@@ -817,7 +879,7 @@ function attackCastle(u){
     else if (T.projectile === 'rock') Audio.siege();
     else Audio.bow();
   } else {
-    damageCastle(u, side, T.dmg);
+    damageCastle(u, side, T.dmg * (T.siegeBonus || 1));
     Audio.castle();
     // dust
     const cx = side === 'red' ? RED_CASTLE_X + CASTLE_W : BLUE_CASTLE_X;
@@ -840,14 +902,18 @@ function fireProjectile(owner, target){
   const d = Math.hypot(dx, dy) || 1;
   let speed = 360, life = 1.4, kind = 'arrow';
   if (T.projectile === 'fireball'){ speed = 280; life = 1.6; kind = 'fireball'; }
+  else if (T.projectile === 'rock'){ speed = 220; life = 2.4; kind = 'rock'; }
+  else if (T.projectile === 'knife'){ speed = 480; life = 0.8; kind = 'knife'; }
   const vx = dx / d * speed;
-  // arrows arc: subtract a bit of vy to lift
-  const vy = dy / d * speed - (kind === 'arrow' ? 60 : 0);
+  // arrows/rocks arc: subtract some vy to lift
+  const liftMap = { arrow: 60, rock: 220, fireball: 0, knife: 0 };
+  const vy = dy / d * speed - (liftMap[kind] || 0);
   state.projectiles.push({
     x: owner.x, y: owner.y - 8, vx, vy,
     dmg: T.dmg, life, kind,
     owner, targetId: target.uid,
     splash: T.splash || 0, color: kind === 'fireball' ? '#ff7a18' : '#f1f5f9',
+    siegeBonus: T.siegeBonus || 1,
   });
 }
 function fireProjectileAtCastle(owner, side){
@@ -858,13 +924,16 @@ function fireProjectileAtCastle(owner, side){
   const d = Math.hypot(dx, dy) || 1;
   let speed = 360, life = 2, kind = 'arrow';
   if (T.projectile === 'fireball'){ speed = 280; life = 2; kind = 'fireball'; }
+  else if (T.projectile === 'rock'){ speed = 220; life = 3; kind = 'rock'; }
   const vx = dx / d * speed;
-  const vy = dy / d * speed - (kind === 'arrow' ? 60 : 0);
+  const liftMap = { arrow: 60, rock: 240, fireball: 0, knife: 0 };
+  const vy = dy / d * speed - (liftMap[kind] || 0);
   state.projectiles.push({
     x: owner.x, y: owner.y - 8, vx, vy,
     dmg: T.dmg, life, kind,
     owner, targetCastleSide: side, splash: T.splash || 0,
     color: kind === 'fireball' ? '#ff7a18' : '#f1f5f9',
+    siegeBonus: T.siegeBonus || 1,
   });
 }
 
@@ -1063,30 +1132,33 @@ function drawUnit(u){
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath();
-  ctx.ellipse(u.x, u.y + T.r * 0.95, T.r * 0.95, T.r * 0.35, 0, 0, TAU);
+  ctx.ellipse(u.x, u.y + T.r * 0.95, T.r * 1.1, T.r * 0.4, 0, 0, TAU);
   ctx.fill();
 
   // Walk bob
   const moving = (u.vx*u.vx + u.vy*u.vy) > 25;
-  const bob = moving ? Math.sin(u.walkPhase) * 1.6 : 0;
+  const bob = (u.key === 'catapult') ? 0 : (moving ? Math.sin(u.walkPhase) * 1.6 : 0);
 
-  // Body
   ctx.save();
   ctx.translate(u.x, u.y + bob);
 
-  // Hit flash overlay
   const fl = u.hitFlash;
 
-  // Base body
-  ctx.fillStyle = body;
-  ctx.beginPath(); ctx.arc(0, -T.r * 0.6, T.r * 0.85, 0, TAU); ctx.fill();
-  ctx.fillStyle = dark; ctx.lineWidth = 2;
-  ctx.strokeStyle = dark;
-  ctx.beginPath(); ctx.arc(0, -T.r * 0.6, T.r * 0.85, 0, TAU); ctx.stroke();
+  if (u.key !== 'catapult'){
+    // Standard humanoid: body + head
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(0, -T.r * 0.6, T.r * 0.85, 0, TAU); ctx.fill();
+    ctx.fillStyle = dark; ctx.lineWidth = 2;
+    ctx.strokeStyle = dark;
+    ctx.beginPath(); ctx.arc(0, -T.r * 0.6, T.r * 0.85, 0, TAU); ctx.stroke();
 
-  // Head
-  ctx.fillStyle = '#f5d0a9';
-  ctx.beginPath(); ctx.arc(0, -T.r * 1.6, T.r * 0.55, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#f5d0a9';
+    ctx.beginPath(); ctx.arc(0, -T.r * 1.6, T.r * 0.55, 0, TAU); ctx.fill();
+  } else {
+    // Catapult base banner color (small flag on side)
+    ctx.fillStyle = body;
+    ctx.fillRect(-T.r * 0.2, -T.r * 0.7, 3, 6);
+  }
 
   // Per-troop weapon / cosmetic
   drawTroopDeco(u, T);
@@ -1197,6 +1269,47 @@ function drawTroopDeco(u, T){
       ctx.beginPath(); ctx.arc(T.r * 1.9, -T.r * 0.55, 7, 0, TAU); ctx.fill();
       break;
     }
+    case 'assassin': {
+      // dark hood overlay on head
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath(); ctx.arc(0, -T.r * 1.6, T.r * 0.62, Math.PI * 0.9, TAU * 1.05); ctx.fill();
+      // glowing eyes
+      const ey = 0.5 + 0.5 * Math.sin(state.time * 6);
+      ctx.fillStyle = `rgba(220,38,38,${0.6 + ey * 0.4})`;
+      ctx.fillRect(-T.r * 0.25, -T.r * 1.55, 2, 1.5);
+      ctx.fillRect( T.r * 0.10, -T.r * 1.55, 2, 1.5);
+      // dual daggers
+      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2;
+      const swing = 1 - clamp(u.cd / (1 / T.atkSpeed || 1), 0, 1);
+      const off = swing * 4;
+      ctx.beginPath(); ctx.moveTo(T.r * 0.4, -T.r * 0.5); ctx.lineTo(T.r * 0.9 + off, -T.r * 1.2 - off); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-T.r * 0.4, -T.r * 0.5); ctx.lineTo(-T.r * 0.9 - off, -T.r * 1.2 - off); ctx.stroke();
+      break;
+    }
+    case 'catapult': {
+      // wheels (drawn under body — visible because body is small)
+      ctx.fillStyle = '#3a2a1a';
+      ctx.beginPath(); ctx.arc(-T.r * 0.7, T.r * 0.4, 4.5, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc( T.r * 0.7, T.r * 0.4, 4.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#1f1208'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(-T.r * 0.7, T.r * 0.4, 4.5, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc( T.r * 0.7, T.r * 0.4, 4.5, 0, TAU); ctx.stroke();
+      // chassis
+      ctx.fillStyle = '#7a5a2a';
+      ctx.fillRect(-T.r, -T.r * 0.1, T.r * 2, 6);
+      // throwing arm — animates with cooldown (cocked when cd close to firing)
+      const reload = clamp(u.cd / (1 / T.atkSpeed || 1), 0, 1);
+      const armAngle = -Math.PI / 2 + (1 - reload) * (Math.PI / 1.6); // back when ready
+      ctx.save();
+      ctx.translate(-T.r * 0.4, -T.r * 0.1);
+      ctx.rotate(armAngle);
+      ctx.strokeStyle = '#a78140'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -T.r * 1.6); ctx.stroke();
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath(); ctx.arc(0, -T.r * 1.6, 4, 0, TAU); ctx.fill();
+      ctx.restore();
+      break;
+    }
   }
   ctx.restore();
 }
@@ -1222,6 +1335,34 @@ function drawProjectile(p){
     ctx.beginPath(); ctx.arc(p.x, p.y, r * 3, 0, TAU); ctx.fill();
     ctx.fillStyle = '#ffd166';
     ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill();
+  } else if (p.kind === 'rock'){
+    p.spin = (p.spin || 0) + 0.4;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.spin);
+    ctx.fillStyle = '#3f3f46';
+    ctx.beginPath();
+    ctx.moveTo(0, -7);
+    ctx.lineTo(6, -3);
+    ctx.lineTo(7, 4);
+    ctx.lineTo(0, 8);
+    ctx.lineTo(-6, 4);
+    ctx.lineTo(-7, -2);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#52525b';
+    ctx.beginPath(); ctx.arc(-2, -2, 2, 0, TAU); ctx.fill();
+    ctx.restore();
+  } else if (p.kind === 'knife'){
+    const ang = Math.atan2(p.vy, p.vx);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.beginPath();
+    ctx.moveTo(-5, 0); ctx.lineTo(4, -1.5); ctx.lineTo(6, 0); ctx.lineTo(4, 1.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(-7, -1, 3, 2);
+    ctx.restore();
   }
 }
 
