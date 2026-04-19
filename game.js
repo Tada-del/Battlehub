@@ -14,6 +14,81 @@ const lerp  = (a, b, t) => a + (b - a) * t;
 const dist2 = (ax, ay, bx, by) => { const dx = bx-ax, dy = by-ay; return dx*dx + dy*dy; };
 const len   = (x, y) => Math.hypot(x, y);
 
+// ---------- Audio (WebAudio synth, no assets) ----------
+const Audio = (() => {
+  let ctx = null, master = null, muted = false, lastPlayed = {};
+  const init = () => {
+    if (ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = 0.35;
+    master.connect(ctx.destination);
+  };
+  const resume = () => { if (ctx && ctx.state === 'suspended') ctx.resume(); };
+  // throttle: don't play same sound more than every N ms
+  const allow = (key, ms) => {
+    const t = performance.now();
+    if (lastPlayed[key] && t - lastPlayed[key] < ms) return false;
+    lastPlayed[key] = t; return true;
+  };
+  const env = (gain, t0, attack, hold, release, peak = 1) => {
+    gain.gain.cancelScheduledValues(t0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peak, t0 + attack);
+    gain.gain.setValueAtTime(peak, t0 + attack + hold);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + hold + release);
+  };
+  const tone = (freq, dur, type='sine', peak=0.5, slideTo=null) => {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo != null) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    o.connect(g); g.connect(master);
+    env(g, t, 0.005, Math.max(0, dur - 0.08), 0.07, peak);
+    o.start(t); o.stop(t + dur + 0.08);
+  };
+  const noiseBurst = (dur, peak=0.5, filterFreq=1500, type='lowpass') => {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = filterFreq;
+    const g = ctx.createGain();
+    src.connect(f); f.connect(g); g.connect(master);
+    env(g, t, 0.005, dur * 0.4, dur * 0.6, peak);
+    src.start(t); src.stop(t + dur + 0.05);
+  };
+  return {
+    init, resume,
+    setMuted: v => { muted = v; if (master) master.gain.value = v ? 0 : 0.35; },
+    isMuted: () => muted,
+    sword:  () => allow('sword', 40)  && (tone(880, 0.07, 'square', 0.18, 1400), noiseBurst(0.06, 0.10, 3500, 'highpass')),
+    bow:    () => allow('bow', 80)    && (tone(220, 0.10, 'triangle', 0.18, 660), noiseBurst(0.05, 0.08, 2000, 'highpass')),
+    fire:   () => allow('fire', 80)   && (tone(180, 0.20, 'sawtooth', 0.22, 90), noiseBurst(0.18, 0.18, 800, 'lowpass')),
+    pike:   () => allow('pike', 60)   && tone(520, 0.06, 'triangle', 0.14, 720),
+    heal:   () => allow('heal', 80)   && (tone(660, 0.18, 'sine', 0.16, 990)),
+    hit:    () => allow('hit', 25)    && noiseBurst(0.05, 0.18, 1200, 'lowpass'),
+    death:  () => allow('death', 60)  && (tone(180, 0.22, 'sawtooth', 0.18, 70), noiseBurst(0.15, 0.10, 600, 'lowpass')),
+    explode:() => allow('explode', 80)&& (tone(90, 0.30, 'sawtooth', 0.30, 40), noiseBurst(0.30, 0.25, 700, 'lowpass')),
+    castle: () => allow('castle', 80) && (tone(70, 0.25, 'square', 0.25, 35), noiseBurst(0.20, 0.18, 500, 'lowpass')),
+    coin:   () => allow('coin', 60)   && (tone(1320, 0.05, 'square', 0.10, 1980)),
+    deny:   () => allow('deny', 60)   && tone(180, 0.10, 'square', 0.12, 90),
+    siege:  () => allow('siege', 100) && (tone(110, 0.14, 'square', 0.20, 60)),
+    knife:  () => allow('knife', 30)  && (tone(2200, 0.04, 'square', 0.10, 3300), noiseBurst(0.04, 0.08, 4500, 'highpass')),
+    win:    () => {
+      if (!ctx || muted) return;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((f, i) => setTimeout(() => tone(f, 0.18, 'triangle', 0.22), i * 90));
+    },
+  };
+})();
+
 // ---------- World constants ----------
 const W = 1280, H = 720;
 const GROUND_Y = 60;       // top edge of playable battlefield
@@ -357,6 +432,7 @@ function tryDeploy(side, key, x, y){
   sideState.gold -= T.cost;
   state.units.push(makeUnit(key, side, x, y));
   spawnPuff(x, y, side);
+  Audio.coin();
   return true;
 }
 
@@ -683,6 +759,7 @@ function attack(attacker, target){
     // Heal pulse
     const heal = T.heal;
     target.hp = Math.min(target.maxHp, target.hp + heal);
+    Audio.heal();
     state.particles.push({
       x: target.x, y: target.y - 14, vx: 0, vy: -20,
       life: 0.5, max: 0.5, color: '#86efac', size: 4, gravity: 0,
@@ -698,6 +775,10 @@ function attack(attacker, target){
   if (T.range > 60){
     // Ranged: spawn projectile aimed at target predicted pos
     fireProjectile(attacker, target);
+    if (T.projectile === 'fireball') Audio.fire();
+    else if (T.projectile === 'rock') Audio.siege();
+    else if (T.projectile === 'knife') Audio.knife();
+    else Audio.bow();
   } else {
     // Melee: instant hit, slight knockback animation
     let dmg = T.dmg;
@@ -707,6 +788,10 @@ function attack(attacker, target){
       attacker.chargeBoost = 0;
     }
     applyDamage(attacker, target, dmg);
+    if (attacker.key === 'pike') Audio.pike();
+    else if (attacker.key === 'sword') Audio.sword();
+    else if (attacker.key === 'knight') Audio.sword();
+    else Audio.hit();
     if (T.splash){
       explode(target.x, target.y, T.splash, T.dmg * 0.5, attacker);
     }
@@ -728,8 +813,12 @@ function attackCastle(u){
   const side = u.side === 'red' ? 'blue' : 'red';
   if (T.range > 60){
     fireProjectileAtCastle(u, side);
+    if (T.projectile === 'fireball') Audio.fire();
+    else if (T.projectile === 'rock') Audio.siege();
+    else Audio.bow();
   } else {
     damageCastle(u, side, T.dmg);
+    Audio.castle();
     // dust
     const cx = side === 'red' ? RED_CASTLE_X + CASTLE_W : BLUE_CASTLE_X;
     for (let i = 0; i < 6; i++){
@@ -798,6 +887,7 @@ function applyDamage(attacker, target, dmg, p){
 }
 
 function explode(x, y, radius, dmg, owner){
+  Audio.explode();
   for (const u of state.units){
     if (!u.alive || u.side === owner.side) continue;
     if (dist2(x, y, u.x, u.y) <= radius * radius){
@@ -819,6 +909,7 @@ function explode(x, y, radius, dmg, owner){
 }
 
 function spawnDeath(u){
+  Audio.death();
   const color = u.side === 'red' ? '#ef4444' : '#3b82f6';
   for (let i = 0; i < 16; i++){
     const a = Math.random() * TAU;
@@ -852,6 +943,7 @@ let shakeAmount = 0;
 function endGame(winner){
   state.over = true;
   state.winner = winner;
+  Audio.win();
   const banner = document.getElementById('banner');
   banner.textContent = (winner === 'red' ? 'Red' : 'Blue') + ' wins!';
   banner.classList.remove('red','blue');
@@ -1206,6 +1298,19 @@ function drawDeployPreview(){
 
 // ---------- Controls (UI) ----------
 document.getElementById('restartBtn').addEventListener('click', restart);
+document.getElementById('muteBtn').addEventListener('click', () => {
+  Audio.init(); Audio.resume();
+  const m = !Audio.isMuted();
+  Audio.setMuted(m);
+  const btn = document.getElementById('muteBtn');
+  btn.textContent = m ? '🔇 Muted' : '🔊 Sound';
+  btn.setAttribute('aria-pressed', m ? 'true' : 'false');
+});
+// Resume / init audio on first user interaction (browser autoplay policy)
+const _firstGesture = () => { Audio.init(); Audio.resume(); window.removeEventListener('pointerdown', _firstGesture); window.removeEventListener('keydown', _firstGesture); };
+window.addEventListener('pointerdown', _firstGesture);
+window.addEventListener('keydown', _firstGesture);
+
 document.getElementById('pauseBtn').addEventListener('click', () => {
   state.paused = !state.paused;
   document.getElementById('pauseBtn').textContent = state.paused ? '▶ Resume' : '❚❚ Pause';
